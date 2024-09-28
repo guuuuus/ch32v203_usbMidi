@@ -4,43 +4,85 @@
  * Version            : V1.0.1
  * Date               : 2022/12/28
  * Description        : ISTR events interrupt service routines
-*********************************************************************************
-* Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
-* Attention: This software (modified or not) and binary are used for 
-* microcontroller manufactured by Nanjing Qinheng Microelectronics.
-*******************************************************************************/ 
+ *********************************************************************************
+ * Copyright (c) 2021 Nanjing Qinheng Microelectronics Co., Ltd.
+ * Attention: This software (modified or not) and binary are used for
+ * microcontroller manufactured by Nanjing Qinheng Microelectronics.
+ *******************************************************************************/
 #include "usb_lib.h"
 #include "usb_prop.h"
 #include "usb_pwr.h"
 #include "usb_istr.h"
 
+#if defined(CH32X035)
+#include "ch32x035_usb.h"
+
+/* Global */
+const uint8_t *pUSBFS_Descr;
+#define Version_Num 0x0100 // V0100
+#define DevEP0SIZE 0x40
+u8 EP2_Tx_Buffer[2];
+
+/* Setup Request */
+volatile uint8_t USBFS_SetupReqCode;
+volatile uint8_t USBFS_SetupReqType;
+volatile uint16_t USBFS_SetupReqValue;
+volatile uint16_t USBFS_SetupReqIndex;
+volatile uint16_t USBFS_SetupReqLen;
+
+/* USB Device Status */
+volatile uint8_t USBFS_DevConfig;
+volatile uint8_t USBFS_DevAddr;
+volatile uint8_t USBFS_DevSleepStatus;
+volatile uint8_t USBFS_DevEnumStatus;
+
+/* end-point number */
+#define DEF_UEP_IN 0x80
+#define DEF_UEP_OUT 0x00
+#define DEF_UEP0 0x00
+#define DEF_UEP1 0x01
+#define DEF_UEP2 0x02
+#define DEF_UEP3 0x03
+#define DEF_UEP4 0x04
+#define DEF_UEP5 0x05
+#define DEF_UEP6 0x06
+#define DEF_UEP7 0x07
+#define DEF_UEP_NUM 8
+
+#define USBFSD_UEP_RX_EN 0x08
+#define USBFSD_UEP_TX_EN 0x04
+#define USBFSD_UEP_BUF_MOD 0x01
+#define DEF_UEP_DMA_LOAD 0 /* Direct the DMA address to the data to be processed */
+#define DEF_UEP_CPY_LOAD 1 /* Use memcpy to move data to a buffer */
+
+#endif
 uint16_t Ep0RxBlks;
 
 /* Private variables */
-__IO uint16_t wIstr;  
-__IO uint8_t bIntPackSOF = 0;  
-__IO uint32_t esof_counter =0;
-__IO uint32_t wCNTR=0;
+__IO uint16_t wIstr;
+__IO uint8_t bIntPackSOF = 0;
+__IO uint32_t esof_counter = 0;
+__IO uint32_t wCNTR = 0;
 
 /* function pointers to non-control endpoints service routines */
-void (*pEpInt_IN[7])(void) ={
-	EP1_IN_Callback,
-	EP2_IN_Callback,
-	EP3_IN_Callback,
-	EP4_IN_Callback,
-	EP5_IN_Callback,
-	EP6_IN_Callback,
-	EP7_IN_Callback,
+void (*pEpInt_IN[7])(void) = {
+    EP1_IN_Callback,
+    EP2_IN_Callback,
+    EP3_IN_Callback,
+    EP4_IN_Callback,
+    EP5_IN_Callback,
+    EP6_IN_Callback,
+    EP7_IN_Callback,
 };
 
-void (*pEpInt_OUT[7])(void) ={
-	EP1_OUT_Callback,
-	EP2_OUT_Callback,
-	EP3_OUT_Callback,
-	EP4_OUT_Callback,
-	EP5_OUT_Callback,
-	EP6_OUT_Callback,
-	EP7_OUT_Callback,
+void (*pEpInt_OUT[7])(void) = {
+    EP1_OUT_Callback,
+    EP2_OUT_Callback,
+    EP3_OUT_Callback,
+    EP4_OUT_Callback,
+    EP5_OUT_Callback,
+    EP6_OUT_Callback,
+    EP7_OUT_Callback,
 };
 
 /*******************************************************************************
@@ -50,11 +92,13 @@ void (*pEpInt_OUT[7])(void) ={
  *
  * @return    None.
  */
+#if defined(CH32V203)
+
 void USB_Istr(void)
 {
-  uint32_t i=0;
+  uint32_t i = 0;
   __IO uint32_t EP[8];
-  if ((*_pEPRxCount(0) & 0xFC00 )!= Ep0RxBlks)
+  if ((*_pEPRxCount(0) & 0xFC00) != Ep0RxBlks)
   {
     *_pEPRxCount(0) |= (Ep0RxBlks & 0xFC00);
   }
@@ -67,12 +111,11 @@ void USB_Istr(void)
 
 #ifdef SOF_CALLBACK
     SOF_Callback();
-		
+
 #endif
   }
 #endif
- 
-  
+
 #if (IMR_MSK & ISTR_CTR)
   if (wIstr & ISTR_CTR & wInterrupt_Mask)
   {
@@ -82,13 +125,13 @@ void USB_Istr(void)
 #endif
   }
 #endif
- 
+
 #if (IMR_MSK & ISTR_RESET)
   if (wIstr & ISTR_RESET & wInterrupt_Mask)
   {
     _SetISTR((uint16_t)CLR_RESET);
     Device_Property.Reset();
-    
+
 #ifdef RESET_CALLBACK
     RESET_Callback();
 #endif
@@ -147,50 +190,197 @@ void USB_Istr(void)
   if (wIstr & ISTR_ESOF & wInterrupt_Mask)
   {
     _SetISTR((uint16_t)CLR_ESOF);
-    
-    if ((_GetFNR()&FNR_RXDP)!=0)
-    {
-      esof_counter ++;
-      
-      if ((esof_counter >3)&&((_GetCNTR()&CNTR_FSUSP)==0))
-      {           
 
-        wCNTR = _GetCNTR(); 
-      
-        for (i=0;i<8;i++) EP[i] = _GetENDPOINT(i);
-      
-        wCNTR|=CNTR_FRES;
+    if ((_GetFNR() & FNR_RXDP) != 0)
+    {
+      esof_counter++;
+
+      if ((esof_counter > 3) && ((_GetCNTR() & CNTR_FSUSP) == 0))
+      {
+
+        wCNTR = _GetCNTR();
+
+        for (i = 0; i < 8; i++)
+          EP[i] = _GetENDPOINT(i);
+
+        wCNTR |= CNTR_FRES;
         _SetCNTR(wCNTR);
- 
-        wCNTR&=~CNTR_FRES;
+
+        wCNTR &= ~CNTR_FRES;
         _SetCNTR(wCNTR);
-      
-        while((_GetISTR()&ISTR_RESET) == 0);
-  
+
+        while ((_GetISTR() & ISTR_RESET) == 0)
+          ;
+
         _SetISTR((uint16_t)CLR_RESET);
-   
-        for (i=0;i<8;i++)
-        _SetENDPOINT(i, EP[i]);
-      
+
+        for (i = 0; i < 8; i++)
+          _SetENDPOINT(i, EP[i]);
+
         esof_counter = 0;
       }
     }
     else
     {
-        esof_counter = 0;
+      esof_counter = 0;
     }
-    
-    Resume(RESUME_ESOF); 
+
+    Resume(RESUME_ESOF);
 
 #ifdef ESOF_CALLBACK
     ESOF_Callback();
 #endif
   }
 #endif
-} /* USB_Istr */
+}
+#elif defined(CH32X035)
 
+void USB_Istr(void)
 
+{
+  // intflag = USBFSD->INT_FG;
+  // intst   = USBFSD->INT_ST;
+  uint32_t i = 0;
+  __IO uint32_t EP[8];
+  if ((*_pEPRxCount(0) & 0xFC00) != Ep0RxBlks)
+  {
+    *_pEPRxCount(0) |= (Ep0RxBlks & 0xFC00);
+  }
+  // wIstr = _GetISTR();
+  wIstr = USBFSD->INT_ST;
+  wIstr |= (USBFSD->INT_FG) << 8;
+#if (IMR_MSK & ISTR_SOF)
+  if (wIstr & ISTR_SOF & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_SOF);
+    bIntPackSOF++;
 
+#ifdef SOF_CALLBACK
+    SOF_Callback();
 
+#endif
+  }
+#endif
 
+#if (IMR_MSK & ISTR_CTR)
+  if (wIstr & ISTR_CTR & wInterrupt_Mask)
+  {
+    CTR_LP();
+#ifdef CTR_CALLBACK
+    CTR_Callback();
+#endif
+  }
+#endif
 
+#if (IMR_MSK & ISTR_RESET)
+  if (wIstr & ISTR_RESET & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_RESET);
+    Device_Property.Reset();
+
+#ifdef RESET_CALLBACK
+    RESET_Callback();
+#endif
+  }
+#endif
+
+#if (IMR_MSK & ISTR_DOVR)
+  if (wIstr & ISTR_DOVR & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_DOVR);
+#ifdef DOVR_CALLBACK
+    DOVR_Callback();
+#endif
+  }
+#endif
+
+#if (IMR_MSK & ISTR_ERR)
+  if (wIstr & ISTR_ERR & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_ERR);
+#ifdef ERR_CALLBACK
+    ERR_Callback();
+#endif
+  }
+#endif
+
+#if (IMR_MSK & ISTR_WKUP)
+  if (wIstr & ISTR_WKUP & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_WKUP);
+    Resume(RESUME_EXTERNAL);
+#ifdef WKUP_CALLBACK
+    WKUP_Callback();
+#endif
+  }
+#endif
+#if (IMR_MSK & ISTR_SUSP)
+  if (wIstr & ISTR_SUSP & wInterrupt_Mask)
+  {
+    if (fSuspendEnabled)
+    {
+      Suspend();
+    }
+    else
+    {
+      Resume(RESUME_LATER);
+    }
+    _SetISTR((uint16_t)CLR_SUSP);
+#ifdef SUSP_CALLBACK
+    SUSP_Callback();
+#endif
+  }
+#endif
+
+#if (IMR_MSK & ISTR_ESOF)
+  if (wIstr & ISTR_ESOF & wInterrupt_Mask)
+  {
+    _SetISTR((uint16_t)CLR_ESOF);
+
+    if ((_GetFNR() & FNR_RXDP) != 0)
+    {
+      esof_counter++;
+
+      if ((esof_counter > 3) && ((_GetCNTR() & CNTR_FSUSP) == 0))
+      {
+
+        wCNTR = _GetCNTR();
+
+        for (i = 0; i < 8; i++)
+          EP[i] = _GetENDPOINT(i);
+
+        wCNTR |= CNTR_FRES;
+        _SetCNTR(wCNTR);
+
+        wCNTR &= ~CNTR_FRES;
+        _SetCNTR(wCNTR);
+
+        while ((_GetISTR() & ISTR_RESET) == 0)
+          ;
+
+        _SetISTR((uint16_t)CLR_RESET);
+
+        for (i = 0; i < 8; i++)
+          _SetENDPOINT(i, EP[i]);
+
+        esof_counter = 0;
+      }
+    }
+    else
+    {
+      esof_counter = 0;
+    }
+
+    Resume(RESUME_ESOF);
+
+#ifdef ESOF_CALLBACK
+    ESOF_Callback();
+#endif
+  }
+#endif
+  USBFSD->INT_FG = wIstr;
+}
+
+#endif
+
+/* USB_Istr */

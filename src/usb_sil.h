@@ -17,7 +17,11 @@
  extern "C" {
 #endif
 
+#if defined(CH32V203)
 #include "ch32v20x.h"
+#elif defined(CH32X035)
+#include "ch32x035.h"
+#endif
 
 uint32_t USB_SIL_Init(void);
 uint32_t USB_SIL_Write(uint8_t bEpAddr, uint8_t* pBufferPointer, uint32_t wBufferSize);

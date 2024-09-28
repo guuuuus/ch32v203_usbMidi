@@ -16,7 +16,11 @@
  extern "C" {
 #endif
 
+#if defined(CH32V203)
 #include "ch32v20x.h"
+#elif defined(CH32X035)
+#include "ch32x035.h"
+#endif
 
 #define CDC_GET_LINE_CODING         0x21                                      /* This request allows the host to find out the currently configured line coding */
 #define CDC_SET_LINE_CODING         0x20                                      /* Configures DTE rate, stop-bits, parity, and number-of-character */

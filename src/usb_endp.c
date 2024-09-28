@@ -16,7 +16,7 @@
 #include "usb_istr.h"
 #include "usb_pwr.h"
 #include "usb_prop.h"
-#include "usb_serial.h"
+#include "usb_midi.h"
 // #include "UART.h"
 
 volatile unsigned char USBD_Endp3_Busy = 1;
@@ -30,7 +30,8 @@ unsigned char txData[64];
 unsigned char txCount = 0;
 volatile unsigned char usbNotReady = 1;
 
-void usbSerial_begin()
+
+void usbMidi_begin()
 {
 	USB_Port_Set(ENABLE, ENABLE); // sets gpio
 	Set_USBConfig();			  // SETS USB CLOCK
@@ -45,19 +46,21 @@ void usbSerial_begin()
 	usbNotReady = 0;
 }
 
-unsigned char usbSerial_connected()
+unsigned char usbMidi_connected()
 {
 	if ((_GetENDPOINT(ENDP0) == 0))
 		return 0;
 	if ((_GetENDPOINT(ENDP0) & 0x3000) == 0x2000)
 		return 0;
+	if (_GetENDPOINT(ENDP3) & 0x10)
+		return 0;
 	else
 		return 1;
 }
 
-signed char usbSerial_writeReady()
+signed char usbMidi_writeReady()
 {
-	if (!usbSerial_connected())
+	if (!usbMidi_connected())
 		return -1;
 	if (USBD_Endp3_Busy || usbNotReady)
 		return 0;
@@ -65,18 +68,18 @@ signed char usbSerial_writeReady()
 		return 1;
 }
 
-void usbSerial_flush()
+void usbMidi_flush()
 {
-	if (!usbSerial_connected())
+	if (!usbMidi_connected())
 		return;
 	volatile unsigned long timeout = 0;
-	while (usbSerial_writeReady() == 0)
+	while (usbMidi_writeReady() == 0)
 
 	{
-		if (timeout > 10000000) // some arbitrary number.....
+		if (timeout > 1000000) // some arbitrary number.....
 			return;
 		timeout++;
-		NOP_Process;
+		NOP_Process();
 	}
 	USB_SIL_Write(EP3_IN, txData, txCount);
 	USBD_Endp3_Busy = 1;
@@ -84,17 +87,20 @@ void usbSerial_flush()
 	txCount = 0;
 }
 
-void usbSerial_writeP(unsigned char *p, unsigned short len)
+void usbMidi_writeP(unsigned char *p, unsigned short len)
 {
+	
 	for (unsigned short i = 0; i < len; i++)
 	{
 		txData[txCount] = p[i];
 		txCount++;
-		if (txCount >= 64)
-		{
-			usbSerial_flush();
-		}
+		txCount &= 0x3f;
+		// if (txCount >= 64)
+		// {
+		// txCount = 0;
+		// }
 	}
+	usbMidi_flush();
 }
 
 unsigned char usbSerial_available()

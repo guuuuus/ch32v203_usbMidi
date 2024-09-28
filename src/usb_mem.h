@@ -17,7 +17,11 @@
  extern "C" {
 #endif
 
+#if defined(CH32V203)
 #include "ch32v20x.h"
+#elif defined(CH32X035)
+#include "ch32x035.h"
+#endif
 
 void UserToPMABufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes);
 void PMAToUserBufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes);

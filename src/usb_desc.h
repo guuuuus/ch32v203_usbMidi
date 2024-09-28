@@ -17,8 +17,11 @@
  extern "C" {
 #endif
 	 
+#if defined(CH32V203)
 #include "ch32v20x.h"
-	 
+#elif defined(CH32X035)
+#include "ch32x035.h"
+#endif	 
 	 
 #define USB_DEVICE_DESCRIPTOR_TYPE              0x01
 #define USB_CONFIGURATION_DESCRIPTOR_TYPE       0x02
@@ -30,10 +33,12 @@
 #define DEF_USBD_MAX_PACK_SIZE      64                              
        
 #define USBD_SIZE_DEVICE_DESC        18
-#define USBD_SIZE_CONFIG_DESC        67
+#define USBD_SIZE_CONFIG_DESC        101
+// #define USBD_SIZE_CONFIG_DESC        83
+// #define USBD_SIZE_CONFIG_DESC        67
 #define USBD_SIZE_STRING_LANGID      4
 #define USBD_SIZE_STRING_VENDOR      14
-#define USBD_SIZE_STRING_PRODUCT     22
+#define USBD_SIZE_STRING_PRODUCT     18
 #define USBD_SIZE_STRING_SERIAL      22
 
 extern const uint8_t USBD_DeviceDescriptor[USBD_SIZE_DEVICE_DESC];
